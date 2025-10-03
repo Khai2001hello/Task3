@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>User Manager (Browser Demo)</title>
+  <!-- SheetJS (xlsx) bản trình duyệt để đọc/ghi Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; padding: 20px; }
+    button { margin-right: 8px; margin-bottom: 8px; }
+    .log { white-space: pre-wrap; background:#111; color:#0f0; padding:10px; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <h1>Quản lý người dùng (bản chạy trên trình duyệt)</h1>
+
+  <div>
+    <button id="btnAdd">Thêm 3 user mẫu</button>
+    <button id="btnList">Xem danh sách (console)</button>
+    <button id="btnSave">Lưu Excel (tải users.xlsx)</button>
+    <label>
+      Nạp từ Excel:
+      <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    </label>
+  </div>
+
+  <h3>Log</h3>
+  <div id="log" class="log"></div>
+
+  <script>
+    // ===== State trong bộ nhớ (trình duyệt) =====
+    let users = [];
+
+    // ===== Helper log ra màn hình + console =====
+    const $log = document.getElementById('log');
+    function log(...args) {
+      console.log(...args);
+      $log.textContent += args.map(x => (typeof x === 'object' ? JSON.stringify(x, null, 2) : String(x))).join(' ') + '\n';
+    }
+
+    // ===== Các hàm giống với bản Node nhưng bỏ fs =====
+    function addUser(user) {
+      if (!user || !user.name || !user.email) {
+        throw new Error("User must have a name and email");
+      }
+      const name  = String(user.name).trim();
+      const email = String(user.email).trim().toLowerCase();
+
+      if (users.some(u => String(u.email).trim().toLowerCase() === email)) {
+        throw new Error("Email already exists");
+      }
+
+      const nextId = users.length
+        ? Math.max(...users.map(u => Number(u.id) || 0)) + 1
+        : 1;
+
+      const record = { id: nextId, name, email, age: user.age ?? null };
+      users.push(record);
+      return record;
+    }
+
+    function getAllUsers() {
+      return users.map(u => ({ ...u }));
+    }
+
+    // Lưu ra Excel: tạo workbook trong RAM và trigger download (không cần fs)
+    function saveUsersToFile(filename = "users.xlsx") {
+      const ws = XLSX.utils.json_to_sheet(users);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Users");
+      XLSX.writeFile(wb, filename); // Trình duyệt sẽ tải file xuống
+      return filename;
+    }
+
+    // Nạp từ Excel người dùng chọn (input type="file")
+    async function loadUsersFromFile(file) {
+      if (!file) return;
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+
+      users = rows
+        .map(row => {
+          const id    = row.id ?? row.ID ?? row.Id ?? null;
+          const name  = row.name ?? row.Name ?? row.NAME ?? "";
+          const email = row.email ?? row.Email ?? row.EMAIL ?? "";
+          const age   = row.age ?? row.Age ?? row.AGE ?? null;
+          return {
+            id:  id != null ? Number(id) || null : null,
+            name: String(name).trim(),
+            email: String(email).trim().toLowerCase(),
+            age: age != null ? Number(age) || null : null,
+          };
+        })
+        .filter(u => u.name && u.email);
+
+      log("Đã nạp từ Excel, số bản ghi:", users.length);
+      log(users);
+      return getAllUsers();
+    }
+
+    // ===== UI events =====
+    document.getElementById('btnAdd').addEventListener('click', () => {
+      try {
+        addUser({ name: "Trần Anh Khải", email: "khai@example.com", age: 24 });
+        addUser({ name: "Phạm Hồng Việt", email: "viet@example.com", age: 23 });
+        addUser({ name: "Thu Vân",       email: "van@example.com",  age: 24 });
+        log("Đã thêm 3 user mẫu.");
+      } catch (e) {
+        log("Lỗi:", e.message);
+      }
+    });
+
+    document.getElementById('btnList').addEventListener('click', () => {
+      const list = getAllUsers();
+      log("Danh sách hiện tại:", list);
+      console.table(list);
+    });
+
+    document.getElementById('btnSave').addEventListener('click', () => {
+      const fn = saveUsersToFile();
+      log("Đã lưu (tải) file:", fn);
+    });
+
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      loadUsersFromFile(file);
+    });
+  </script>
+</body>
+</html>
